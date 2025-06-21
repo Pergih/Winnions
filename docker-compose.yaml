@@ -1,0 +1,23 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: weather_postgres
+    environment:
+      # POSTGRES_DB: weather_db
+      # POSTGRES_USER: weather_user
+      # POSTGRES_PASSWORD: weather_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./pg/data:/var/lib/postgresql/data
+      - ./pg/airflow_init.sql:/docker-entrypoint-initdb.d/airflow_init.sql
+    networks:
+      - elt_network
+
+
+volumes:
+  pg_data:
+
+networks:
+  my_network:
+    driver: bridge

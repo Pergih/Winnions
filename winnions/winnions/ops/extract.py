@@ -1,3 +1,6 @@
+from dagster import Out, Output, job, op
+import logging
+
 import requests
 import pandas as pd
 import os
@@ -7,20 +10,23 @@ import numpy as np
 load_dotenv(dotenv_path=".env")
 
 API_KEY = os.getenv("RIOT_API_KEY")
+logger = logging.getLogger('console_logger')
 
-if not API_KEY:
-    print("❌ API key not loaded")
-else:
-    print("✅ API key loaded")
+# if not API_KEY:
+#     logger.error("❌ API key not loaded")
+# else:
+#     logger.log("✅ API key loaded")
 
-# puuid = "g6Tg0NiwvlSTzK5ohu-RkqjwkSNuQ6HLGmuSiKRg_6CKnUNop0ROygQIW9w8IAG0qyS9DhCs2aWQDA"
 region = "europe"
 
 headers = {
-        "X-Riot-Token": API_KEY
+        "X-Riot-Token": "RGAPI-712cf5e4-2ca4-441e-9403-18e4a3de1dc5"  # or hardcoded for testing
     }
 
-def get_puuid(gameName, tagLine):
+
+@op(out=Out(str))
+def get_puuid(gameName="Pergih", tagLine="AKL"):
+
     url = f"https://{region}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/{gameName}/{tagLine}"
     
     response = requests.get(url, headers=headers)
@@ -29,6 +35,8 @@ def get_puuid(gameName, tagLine):
     data = response.json()
     return data['puuid']
 
+
+@op(out=Out(list))
 def get_20_most_recent_matches(puuid):
     # print(dict(os.environ))  # Temporarily — to debug
 
@@ -47,7 +55,12 @@ def get_20_most_recent_matches(puuid):
     return data
     
     
+
+@op(out=Out(str))
+def get_first_match_id(matches: list[str]) -> str:
+    return matches[0]
     
+@op(out=Out(dict))
 def get_match_info(matchId):
     url = f"https://{region}.api.riotgames.com/lol/match/v5/matches/{matchId}"
     
@@ -57,34 +70,32 @@ def get_match_info(matchId):
     data = response.json()
     # print(data)
     return data
-    
-def get_minions_lost(data):
-    # blueteam == 100 redteam == 200
-    mydict = {}
-    mydict[100] = 0
-    mydict[200] = 0
+
+
+
+
+@op(out=Out(dict))
+def get_minions_lost(data: dict) -> dict:
+    mydict = {100: 0, 200: 0}
     for player in data['info']['participants']:
         print(player['riotIdGameName'])
         print(player['totalMinionsKilled'])
         print(player['teamId'])
-        mydict[player['teamId']] = mydict[player['teamId']] + player['totalMinionsKilled']
-        
-    total_minions = count_minions(player['timePlayed']) * 3 # 3 lanes
+        mydict[player['teamId']] += player['totalMinionsKilled']
     
-    # print(total_minions)
-    # print(mydict)
-
+    total_minions = count_minions(player['timePlayed']) * 3  # 3 lanes
+    
     for team in mydict:
         print(team)
-        print(mydict[team]/(player['timePlayed'] // 60))
+        print(mydict[team] / (player['timePlayed'] // 60))
     
     for team in mydict:
         mydict[team] = total_minions - mydict[team]
-        
-    
-    print(mydict)
-    # print(type(data['info']['participants']))
 
+    print(mydict)
+    return mydict
+    
+@op(out=Out(int))
 def count_minions(time_played):
     # Subtract the initial delay
     if time_played < 65:
@@ -109,13 +120,4 @@ def count_minions(time_played):
             else:  # After 25 minutes → every wave
                 siege_minions += 1
 
-    total_minions = base_minions + siege_minions
-    return total_minions
-
-    
-    
-if __name__ == "__main__":
-    puuid = get_puuid('BooGuga', 'LIFT')
-    matches = get_20_most_recent_matches(puuid)
-    data = get_match_info(matchId=matches[2])
-    get_minions_lost(data)
+    return base_minions + siege_minions
